@@ -49,8 +49,11 @@ else
 
 -- better-live-audio (https://github.com/staghado/better-live-audio)
 local blaDir = os.getenv("HOME") .. "/.local/share/better-live-audio"
+local blaLiveFile = "/tmp/bla_live.txt"
 local blaRecording = false
 local blaRecAlert = nil
+local blaLiveCanvas = nil
+local blaLiveTimer = nil
 local alertStyle = {
     strokeWidth = 2,
     strokeColor = { white = 1, alpha = 0.25 },
@@ -65,9 +68,59 @@ local alertStyle = {
     padding = 20,
 }
 
+local function blaCreateCanvas()
+    local screen = hs.screen.mainScreen():frame()
+    local w = math.min(900, screen.w - 80)
+    local h = 110
+    local x = screen.x + (screen.w - w) / 2
+    local y = screen.y + screen.h - h - 80
+    blaLiveCanvas = hs.canvas.new({ x = x, y = y, w = w, h = h })
+    blaLiveCanvas:appendElements(
+        {
+            type = "rectangle", action = "fill",
+            fillColor = { white = 0.1, alpha = 0.85 },
+            strokeColor = { white = 1, alpha = 0.25 },
+            strokeWidth = 2,
+            roundedRectRadii = { xRadius = 12, yRadius = 12 },
+        },
+        {
+            id = "txt", type = "text", text = "",
+            textColor = { white = 1, alpha = 1 },
+            textFont = ".AppleSystemUIFont",
+            textSize = 20,
+            textAlignment = "left",
+            frame = { x = 20, y = 16, w = w - 40, h = h - 32 },
+        }
+    )
+    blaLiveCanvas:show()
+end
+
+-- Defer materializing the canvas until tokens actually arrive, so the user
+-- doesn't stare at an empty box for the first chunk's worth of audio.
+local function blaStartLive()
+    blaLiveTimer = hs.timer.doEvery(0.1, function()
+        local f = io.open(blaLiveFile, "r")
+        if not f then return end
+        local s = f:read("*a") or ""
+        f:close()
+        if s == "" then return end
+        if not blaLiveCanvas then blaCreateCanvas() end
+        if #s > 300 then s = "…" .. s:sub(-300) end
+        blaLiveCanvas[2].text = s
+    end)
+end
+
+local function blaStopLive()
+    if blaLiveTimer then blaLiveTimer:stop(); blaLiveTimer = nil end
+    if blaLiveCanvas then blaLiveCanvas:delete(); blaLiveCanvas = nil end
+end
+
 hs.hotkey.bind({"cmd", "shift"}, "a", function()
     if not blaRecording then
         blaRecording = true
+        -- Pre-truncate to hide any stale text before run.sh races in to clear it.
+        local f = io.open(blaLiveFile, "w"); if f then f:close() end
+        blaStartLive()
         local s = hs.fnutils.copy(alertStyle)
         s.fillColor = { red = 0.4, green = 0.1, blue = 0.1, alpha = 0.85 }
         blaRecAlert = hs.alert.show("● Recording…  ⌘⇧A to stop", s, 9999)
@@ -78,6 +131,7 @@ hs.hotkey.bind({"cmd", "shift"}, "a", function()
         local working = hs.alert.show("⏳ Transcribing…", alertStyle, 9999)
         hs.task.new(blaDir .. "/src/better-live-audio/run.sh", function(code)
             hs.alert.closeSpecific(working)
+            blaStopLive()
             if code == 0 then
                 hs.alert.show("✓ Transcript copied", alertStyle, 2)
                 hs.sound.getByName("Pop"):play()

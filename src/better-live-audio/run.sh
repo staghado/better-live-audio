@@ -11,6 +11,7 @@ TRANSCRIBE_PROMPT="can you transcribe the speech into a written format?"
 CHUNK_SEC=30
 SESSION_DIR="${TMPDIR:-/tmp}/bla_session"
 TRANSCRIPTS="$SESSION_DIR/transcripts.txt"
+LIVE_FILE="/tmp/bla_live.txt"   # fixed path so the Hammerspoon overlay can find it
 REC_PIDFILE="${TMPDIR:-/tmp}/bla_rec.pid"
 WORKER_PIDFILE="${TMPDIR:-/tmp}/bla_worker.pid"
 
@@ -37,22 +38,35 @@ transcribe_chunk() {
     local b64="${wav}.b64" json="${wav}.json"
     base64 -i "$wav" | tr -d '\n' > "$b64"
     jq -n --rawfile aud "$b64" --arg prompt "$TRANSCRIBE_PROMPT" '{
+        stream: true,
         messages: [{role: "user", content: [
             {type: "input_audio", input_audio: {data: $aud, format: "wav"}},
             {type: "text", text: $prompt}
         ]}]
     }' > "$json"
+    # tee streams tokens to LIVE_FILE for the live overlay; the captured stdout
+    # is the joined chunk text used for the final clipboard paste.
     local result
-    result=$(curl -sf --max-time 120 "$SERVER_URL/v1/chat/completions" \
-        -H "Content-Type: application/json" --data-binary "@$json") || { rm -f "$b64" "$json"; return 1; }
+    result=$(
+        curl -sfN --max-time 120 "$SERVER_URL/v1/chat/completions" \
+            -H "Content-Type: application/json" --data-binary "@$json" \
+        | jq --unbuffered -j -R '
+              if startswith("data: [DONE]") then empty
+              elif startswith("data: ") then
+                  (.[6:] | fromjson? | .choices[0].delta.content // empty)
+              else empty end' \
+        | tee -a "$LIVE_FILE"
+    ) || { rm -f "$b64" "$json"; return 1; }
     rm -f "$b64" "$json"
-    echo "$result" | jq -r '.choices[0].message.content' | awk 'NF'
+    [ -n "$result" ] && printf ' ' >> "$LIVE_FILE"
+    printf '%s\n' "$result" | awk 'NF'
 }
 
 case "${1:-}" in
     start)
         rm -rf "$SESSION_DIR"; mkdir -p "$SESSION_DIR"
         : > "$TRANSCRIPTS"
+        : > "$LIVE_FILE"
 
         # Recorder: rec records CHUNK_SEC, exits (WAV header finalized), loop spawns the next one.
         # .stop sentinel signals the loop to halt; SIGINT to the in-flight rec finalizes its chunk.
