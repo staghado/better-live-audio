@@ -133,7 +133,8 @@ hs.hotkey.bind({"cmd", "shift"}, "a", function()
             hs.alert.closeSpecific(working)
             blaStopLive()
             if code == 0 then
-                hs.alert.show("✓ Transcript copied", alertStyle, 2)
+                hs.eventtap.keyStroke({"cmd"}, "v", 0)
+                hs.alert.show("✓ Transcript pasted", alertStyle, 2)
                 hs.sound.getByName("Pop"):play()
             else
                 local s = hs.fnutils.copy(alertStyle)

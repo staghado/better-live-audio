@@ -1,6 +1,6 @@
 # better-live-audio
 
-⌘⇧A, speak, ⌘⇧A, paste.
+⌘⇧A, speak, ⌘⇧A.
 
 Local dictation for macOS. [Granite Speech 4.0 1B](https://huggingface.co/ibm-granite/granite-4.0-1b-speech) via [llama.cpp](https://github.com/ggml-org/llama.cpp).
 
@@ -15,7 +15,7 @@ Then:
 
 ## Usage
 
-Press ⌘⇧A to start, press ⌘⇧A again to stop. Transcript copies to the clipboard. Paste with ⌘V.
+Press ⌘⇧A to start, press ⌘⇧A again to stop. Transcript pastes into the focused text field (also left on the clipboard so you can re-paste with ⌘V).
 
 First run downloads the model (~3 GB). Subsequent runs hit the warm server.
 
