@@ -2,7 +2,8 @@
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/usr/sbin:/bin"
 
-SERVER_URL="http://localhost:8081"
+PORT="${BLA_PORT:-8127}"
+SERVER_URL="http://localhost:$PORT"
 CONTEXT_SIZE=4096   # Granite Speech 4.0 1B's trained ceiling — don't raise
 
 HF_REPO="staghado/granite-speech-4.0-1b-GGUF"
@@ -20,7 +21,7 @@ server_ready() {
 
 ensure_server() {
     server_ready && return
-    llama-server -hf "$HF_REPO" -c "$CONTEXT_SIZE" --port 8081 \
+    llama-server -hf "$HF_REPO" -c "$CONTEXT_SIZE" --port "$PORT" \
         --jinja --temp 0 --top-k 1 \
         >"${TMPDIR:-/tmp}/llama-server-audio.log" 2>&1 &
     for _ in $(seq 240); do
